@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ober-ocr-mcp": {
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "${PLUGIN_ROOT}/scripts/run-ober-ocr-mcp.cmd"
+      ]
+    }
+  }
+}

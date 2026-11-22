@@ -1,0 +1,49 @@
+{
+  "experiment_id": "absorption-desorption-1547-sop",
+  "title": "吸收解吸综合 3D 虚拟仿真实验项目【1547】（流体力学 / CO2 吸收解吸 / 氨吸收 / 丙酮吸收）实机标定模板",
+  "calibrated": true,
+  "window_query": "吸收解吸综合实验",
+  "notes": "基于 1914x1007 UnityVR.exe 客户区（client_origin=[3,32]）实机全部 7 项子实验全流程校准。属架构 B2（无 GUS / ModelManage / scorerun.exe），查看评分内嵌于 UnityVR 顶部栏；空气流量调节阀为旁路放空结构（100%=全旁路零风量）；不同子实验的 设备列表 分类与子菜单顺序不同，切换子实验后务必重新 OCR 菜单坐标。",
+  "constants": {
+    "ammonia_tower": { "Z_m": 0.54, "D_m": 0.10, "rho_U_kg_m3": 1000.0, "rho_air20": 1.204, "rho_nh3_20": 0.707, "C_exh": 0.006313, "V_exh_ml": 5.00, "C_abs": 0.05148 },
+    "acetone_tower": { "Z_m": 0.700, "D_m": 0.050, "Vp_m3": 0.001374, "rho_U_kg_m3": 1000.0 }
+  },
+  "points": {
+    "top_home": { "rx": 0.17712, "ry": 0.02582, "label": "顶部：返回主页 (342,58)" },
+    "top_intro": { "rx": 0.24190, "ry": 0.02582, "label": "顶部：实验介绍 (466,58)" },
+    "top_file_mgr": { "rx": 0.30617, "ry": 0.02582, "label": "顶部：文件管理 (589,58)" },
+    "top_record_data": { "rx": 0.37095, "ry": 0.02681, "label": "顶部：记录数据 (713,59)" },
+    "top_charts": { "rx": 0.43574, "ry": 0.02681, "label": "顶部：查看图表 (837,59)" },
+    "top_equipment_list": { "rx": 0.49948, "ry": 0.02582, "label": "顶部：设备列表 (959,58)" },
+    "top_view_score": { "rx": 0.56479, "ry": 0.02582, "label": "顶部：查看评分 (1084,58)" },
+    "top_analysis": { "rx": 0.62957, "ry": 0.02582, "label": "顶部：实验分析 (1208,58)" },
+    "top_report": { "rx": 0.69383, "ry": 0.02681, "label": "顶部：生成报告 (1331,59)" },
+    "top_settings": { "rx": 0.75862, "ry": 0.02681, "label": "顶部：系统设置 (1455,59)" },
+    "top_exit": { "rx": 0.82236, "ry": 0.02582, "label": "顶部：退出 (1577,58)" },
+    "score_tab_p01": { "rx": 0.06635, "ry": 0.16187, "label": "查看评分：P01 过程标签 (130,195)" },
+    "score_tab_p02": { "rx": 0.06635, "ry": 0.21152, "label": "查看评分：P02 过程标签 (130,245)" },
+    "score_tab_p03": { "rx": 0.06635, "ry": 0.26018, "label": "查看评分：P03 过程标签 (130,294)" },
+    "score_tab_p04": { "rx": 0.06635, "ry": 0.30785, "label": "查看评分：P04 过程标签 (130,342)" },
+    "score_close_x": { "rx": 0.98067, "ry": 0.03376, "label": "查看评分：右上关闭叉 (1880,66)" },
+    "file_mgr_close": { "rx": 0.67764, "ry": 0.72890, "label": "文件管理：关闭按钮 (1300,766)" },
+    "data_add_row": { "rx": 0.37722, "ry": 0.72890, "label": "数据管理：记录数据按钮 (725,766)" },
+    "data_submit": { "rx": 0.61755, "ry": 0.72890, "label": "数据管理：提交按钮 (1185,766)" },
+    "data_close": { "rx": 0.67503, "ry": 0.72890, "label": "数据管理：关闭按钮 (1295,766)" },
+    "data_header_neutral": { "rx": 0.31452, "ry": 0.45184, "label": "数据管理：失去焦点中性表头 (605,487)" },
+    "data_scrollbar_start": { "rx": 0.33281, "ry": 0.70109, "label": "数据管理：水平滚动条左侧滑块中心 (640,738)" },
+    "modal_save_ok_x": { "rx": 0.59352, "ry": 0.32175, "label": "保存成功/提交成功弹窗：红叉 (1139,356)" },
+    "quiz_submit": { "rx": 0.73406, "ry": 0.76266, "label": "思考题：提交按钮 (1408,800)" },
+    "quiz_close_x": { "rx": 0.75392, "ry": 0.16485, "label": "思考题：右上红叉 (1446,198)" },
+    "valve_popup_open": { "rx": 0.47126, "ry": 0.47964, "label": "调节阀弹窗：开按钮 (905,515)" },
+    "valve_popup_close": { "rx": 0.52612, "ry": 0.47964, "label": "调节阀弹窗：关按钮 (1010,515)" },
+    "valve_popup_neutral_title": { "rx": 0.50000, "ry": 0.39722, "label": "调节阀弹窗：标题栏防悬停中性位 (960,432)" },
+    "valve_popup_close_x": { "rx": 0.55434, "ry": 0.39523, "label": "调节阀弹窗：关闭叉 (1064,430)" },
+    "exit_confirm_ok": { "rx": 0.44253, "ry": 0.55412, "label": "Unity 退出确认框：确定 (850,590)" }
+  },
+  "rois": {
+    "valve_popup_pct": { "rx": 0.46, "ry": 0.54, "rw": 0.08, "rh": 0.06, "unit": "%", "note": "调用 adjust_valve_popup 或先悬停标题栏后读取" },
+    "acetone_chromatograph_hud": { "rx": 0.82, "ry": 0.18, "rw": 0.18, "rh": 0.20, "unit": "mole_frac", "note": "丙酮吸收右侧色谱浓度显示 y1/y2" },
+    "data_table_headers_row0": { "rx": 0.29, "ry": 0.46, "rw": 0.45, "rh": 0.15, "unit": "px", "note": "数据管理表头及首行读数区域" },
+    "quiz_radio_col": { "rx": 0.23, "ry": 0.20, "rw": 0.10, "rh": 0.52, "unit": "px", "note": "思考题选项圆圈列，配合 detect_ui_boxes(kind='radio_circles')" }
+  }
+}

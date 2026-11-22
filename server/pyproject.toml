@@ -1,0 +1,19 @@
+[project]
+name = "ober-ocr-mcp"
+version = "0.5.0"
+description = "Standalone local WGC/MSS + RapidOCR + 7-segment LED + closed-loop valve/color watcher MCP server for OBER chemical simulation experiments."
+requires-python = ">=3.12"
+dependencies = [
+    "fastmcp>=4.0",
+    "mss>=10.0",
+    "numpy>=2.0",
+    "onnxruntime>=1.20",
+    "opencv-python>=4.10",
+    "pillow>=11.0",
+    "pywin32>=308",
+    "rapidocr-onnxruntime>=1.4",
+    "windows-capture>=2.0",
+]
+
+[project.scripts]
+ober-ocr-mcp = "ober_ocr_mcp:main"

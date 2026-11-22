@@ -1,0 +1,9 @@
+captures/
+generated-configs/
+server/.venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+mcp_config.local.json
+*.log

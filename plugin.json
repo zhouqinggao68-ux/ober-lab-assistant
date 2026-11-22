@@ -1,0 +1,22 @@
+{
+  "name": "ober-lab-assistant",
+  "displayName": "欧倍尔实验助手 (OBR Lab Assistant)",
+  "version": "0.5.0",
+  "author": {
+    "name": "zhouqinggao68-ux",
+    "url": "https://github.com/zhouqinggao68-ux"
+  },
+  "homepage": "https://github.com/zhouqinggao68-ux/ober-lab-assistant",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zhouqinggao68-ux/ober-lab-assistant"
+  },
+  "license": "MIT",
+  "description": "面向欧倍尔（OBR）化工虚拟仿真实验的跨平台 AI 助手插件（支持豆包工作 / DeepSeek-Harness / Antigravity / Claude Code）：独立 WGC+RapidOCR 视觉引擎、红字七段数码管解码、闭环调节阀调参、化学色变终点盯表、多实验化工计算 CLI 与实机全流程 SOP。",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "检查当前桌面欧倍尔仿真窗口并识别所属架构（仿DCS+ModelManage / 纯3D+scorerun / 单进程3D+查看评分）与预置标定",
+    "先审计查看评分、文件管理、记录数据表头单位与设备列表菜单，再生成当前实验的防扣分 SOP",
+    "使用 read_seven_segment_roi、adjust_valve_popup、watch_color_endpoint 与 chem_calc.py 协助完成本实验并安全交卷解锁"
+  ]
+}

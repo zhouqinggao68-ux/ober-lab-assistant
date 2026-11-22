@@ -1,0 +1,19 @@
+{
+  "experiment_id": "distillation-startup-template",
+  "title": "精馏实训开车操作（未校准模板）",
+  "calibrated": false,
+  "window_query": "精馏",
+  "notes": "请先通过 capture_window_wgc 与 find_text_targets 完成实机窗口点位标定后，再将 calibrated 设为 true 并另存为专用 preset。",
+  "points": {
+    "cooling_water_valve": { "rx": 0.0, "ry": 0.0, "label": "冷却水阀（待标定）" },
+    "reboiler_steam_valve": { "rx": 0.0, "ry": 0.0, "label": "再沸器加热阀（待标定）" },
+    "reflux_pump_switch": { "rx": 0.0, "ry": 0.0, "label": "回流泵启停（待标定）" },
+    "feed_valve": { "rx": 0.0, "ry": 0.0, "label": "进料调节阀（待标定）" }
+  },
+  "rois": {
+    "top_temperature": { "rx": 0.0, "ry": 0.0, "rw": 0.08, "rh": 0.04, "unit": "°C" },
+    "bottom_temperature": { "rx": 0.0, "ry": 0.0, "rw": 0.08, "rh": 0.04, "unit": "°C" },
+    "reflux_drum_level": { "rx": 0.0, "ry": 0.0, "rw": 0.08, "rh": 0.04, "unit": "%" },
+    "column_pressure": { "rx": 0.0, "ry": 0.0, "rw": 0.08, "rh": 0.04, "unit": "kPa" }
+  }
+}

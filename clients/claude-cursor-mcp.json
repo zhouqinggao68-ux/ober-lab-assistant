@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ober-ocr-mcp": {
+      "command": "<REPO_DIR>\\server\\.venv\\Scripts\\python.exe",
+      "args": [
+        "<REPO_DIR>\\server\\ober_ocr_mcp.py"
+      ]
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ober-ocr-mcp": {
+      "transport": "stdio",
+      "command": "cmd.exe",
+      "args": [
+        "/d",
+        "/c",
+        "<REPO_DIR>\\scripts\\run-ober-ocr-mcp.cmd"
+      ]
+    }
+  }
+}

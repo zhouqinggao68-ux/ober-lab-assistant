@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "ober-ocr-mcp": {
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "${PLUGIN_ROOT}/scripts/run-ober-ocr-mcp.cmd"]
+    },
+    "ober-windows-mcp": {
+      "command": "windows-mcp",
+      "args": [
+        "serve",
+        "--exclude-tools",
+        "PowerShell,Registry,FileSystem,Process"
+      ],
+      "env": {
+        "WINDOWS_MCP_DISABLE_FLASH": "1",
+        "WINDOWS_MCP_SCREENSHOT_SCALE": "1.0",
+        "ANONYMIZED_TELEMETRY": "false"
+      }
+    }
+  }
+}
