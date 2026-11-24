@@ -1,4 +1,4 @@
-"""Self-contained unit, CLI, and MCP stdio verification suite for ober_ocr_mcp v0.5.0."""
+"""Self-contained unit, CLI, and MCP stdio verification suite for ober_ocr_mcp v0.6.0."""
 
 from __future__ import annotations
 
@@ -136,7 +136,7 @@ def test_cmd_launcher_mcp_initialize() -> None:
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "ober-test", "version": "0.5.0"},
+                "clientInfo": {"name": "ober-test", "version": "0.6.0"},
             },
         }
     )
@@ -202,6 +202,15 @@ def test_detect_ui_boxes_synthetic() -> None:
     assert orientations == {"horizontal", "vertical"}, f"Expected both scrollbar orientations, got {sdet}"
 
 
+    # Alias checks: radio_boxes, close_x, scrollbar
+    qdet_alias = srv._detect_ui_boxes_on_bgr(quiz, (440, 200), (3, 32), (1914, 1007), kind="radio_boxes")
+    assert qdet_alias["kind"] == "radio_circles" and qdet_alias["count"] == 2
+    rdet_alias = srv._detect_ui_boxes_on_bgr(modal, (1300, 180), (3, 32), (1914, 1007), kind="close_x")
+    assert rdet_alias["kind"] == "red_close" and rdet_alias["count"] == 1
+    sdet_alias = srv._detect_ui_boxes_on_bgr(sb, (500, 450), (3, 32), (1914, 1007), kind="scrollbar")
+    assert sdet_alias["kind"] == "scrollbar_thumb" and {it["orientation"] for it in sdet_alias["items"]} == {"horizontal", "vertical"}
+
+
 def test_color_endpoint_detector() -> None:
     yellow_flask = np.full((40, 40, 3), (240, 240, 240), dtype=np.uint8)
     yellow_flask[10:30, 10:30] = (15, 245, 245)  # BGR yellow
@@ -239,6 +248,12 @@ def test_valve_step_controller_and_tooltip_parser() -> None:
     ramp = srv._compute_valve_step(20.0, 60.0)
     assert ramp["action"] == "ramp_hold" and ramp["direction"] == "open" and 0.4 < ramp["press_duration_sec"] < 0.8
 
+    # Adaptive overshoot damping & online rate calibration
+    damped = srv._compute_valve_step(100.0, 50.0, overshoot_count=1, last_duration_sec=0.685)
+    assert damped["action"] == "ramp_hold" and damped["press_duration_sec"] < 0.35
+    scaled = srv._compute_valve_step(40.0, 60.0, rate_pct_per_sec=180.0)
+    assert scaled["press_duration_sec"] < 0.12
+
     p = srv._parse_valve_tooltip_state
     assert p("VA718: 已开", [], "VA718") == "已开"
     assert p("VA718: 已关", [], "VA718") == "已关"
@@ -246,10 +261,24 @@ def test_valve_step_controller_and_tooltip_parser() -> None:
     assert p("空气旁路阀：已关闭", [], "空气旁路阀") == "已关"
     assert p("VA706: 已关闭", [], "VA718") is None
 
+    # Short 1522-style tooltips and 2-digit cross-tag guard
+    assert p("VA29:关", [], "VA29") == "已关"
+    assert p("VA05:开", [], "VA05") == "已开"
+    assert p("202月 VA05:开", [], "VA05") == "已开"
+    assert p("VA02:开", [], "VA29") is None
+    assert srv._normalize_valve_state("开") == "已开"
+    assert srv._normalize_valve_state("关") == "已关"
+
     assert srv._wheel_mouse_delta("up", False) == (srv.MOUSEEVENTF_WHEEL, 120)
     assert srv._wheel_mouse_delta("down", False) == (srv.MOUSEEVENTF_WHEEL, -120)
     assert srv._wheel_mouse_delta("right", True) == (srv.MOUSEEVENTF_HWHEEL, 120)
     assert srv._wheel_mouse_delta("left", True) == (srv.MOUSEEVENTF_HWHEEL, -120)
+
+    # run_action_sequence new wait alias & missing activate query check
+    wres = srv.run_action_sequence([{"op": "wait", "seconds": 0.01}])
+    assert wres["all_ok"] is True and wres["results"][0]["result"]["slept_sec"] == 0.01
+    eres = srv.run_action_sequence([{"op": "activate"}])
+    assert eres["all_ok"] is False and "window_query" in eres["results"][0]["error"]
 
 
 def test_extract_numbers_and_mmss() -> None:
@@ -290,6 +319,41 @@ def test_chem_calc_cli() -> None:
     assert ac["m"] == 1.98 and abs(ac["Vp_m3"] - 0.001374) < 1e-5
     assert abs(ac["KYa_mol_m3_s"] - 51.60) < 0.05 and ac["phi_pct"] == 99.66
 
+    # 1522 Item 16 (ethanol-water verified live values)
+    ew = _run_calc(
+        "distillation-1522",
+        "--system", "ethanol-water",
+        "--wd-full", "87.97", "--ww-full", "0.39",
+        "--wd-part", "75.06", "--ww-part", "0.38", "--wf-part", "31.53",
+        "--l-lh", "9.60", "--d-lh", "2.40", "--t-feed", "38.3", "--np", "10",
+    )
+    assert ew["xD_full_pct"] == 74.10 and ew["xW_full_pct"] == 0.15
+    assert ew["xD_part_pct"] == 54.08 and ew["xF_part_pct"] == 15.27
+    assert ew["t_bp_C"] == 93.31 and ew["t_avg_C"] == 65.80
+    assert ew["Cp_m_kJ_kmolC"] == 83.69 and ew["r_m_kJ_kmol"] == 40360.95 and ew["q"] == 1.11
+
+    # 1522 Item 14/15 (ethanol-propanol with McCabe-Thiele stages)
+    ep = _run_calc(
+        "distillation-1522",
+        "--system", "ethanol-propanol",
+        "--wd-full", "85.36", "--ww-full", "13.04",
+        "--wd-part", "85.36", "--ww-part", "13.04", "--wf-part", "31.51",
+        "--l-lh", "9.93", "--d-lh", "2.48", "--t-feed", "38.2", "--np", "10",
+    )
+    assert "NT_full" in ep and "ET_full_pct" in ep and "NT_part" in ep and "ET_part_pct" in ep
+    assert ep["R"] == 4.0 and ep["q"] > 1.0
+
+    # 1522 Item 17 (benzene-toluene)
+    bt = _run_calc(
+        "distillation-1522",
+        "--system", "benzene-toluene",
+        "--wd-full", "90.0", "--ww-full", "10.0",
+        "--wd-part", "85.0", "--ww-part", "15.0", "--wf-part", "45.0",
+        "--l-lh", "10.0", "--d-lh", "2.5", "--t-feed", "40.0", "--np", "10",
+    )
+    assert bt["system"] == "benzene-toluene" and bt["M1"] == 78.11 and bt["M2"] == 92.14
+    assert 80.0 < bt["t_bp_C"] < 105.0 and bt["q"] > 1.0
+
 
 def test_json_configs_valid() -> None:
     for rel in (
@@ -302,13 +366,84 @@ def test_json_configs_valid() -> None:
         "presets/rectification-t701-sop.json",
         "presets/fluidized-bed-drying-sop.json",
         "presets/absorption-desorption-1547-sop.json",
+        "presets/distillation-1522-sop.json",
     ):
         path = PLUGIN_ROOT / rel
         data = json.loads(path.read_text(encoding="utf-8"))
         if rel == "plugin.json":
-            assert data.get("version") == "0.5.0", f"Expected plugin version 0.5.0, got {data.get('version')}"
+            assert data.get("version") == "0.7.0", f"Expected plugin version 0.7.0, got {data.get('version')}"
         if rel.startswith("presets/"):
             assert data.get("calibrated") is True, f"Preset {rel} must be calibrated"
+        if rel == "presets/distillation-1522-sop.json":
+            assert data["points"]["valve_popup_open"]["ry"] < 0.50
+            assert data["points"]["valve_popup_close"]["ry"] < 0.50
+            assert "valve_popup_slider_100" in data["points"]
+
+
+def test_slider_jump_and_action_aliases() -> None:
+    import ober_ocr_mcp as ober
+
+    assert ober._compute_slider_click_xy(0.0, (855, 621), (1065, 621)) == (855, 621)
+    assert ober._compute_slider_click_xy(100.0, (855, 621), (1065, 621)) == (1065, 621)
+    assert ober._compute_slider_click_xy(50.0, (855, 621), (1065, 621)) == (960, 621)
+    assert ober._compute_slider_click_xy(55.7, (855, 621), (1065, 621)) == (972, 621)
+    assert ober._compute_slider_click_xy(-10.0, (855, 621), (1065, 621)) == (855, 621)
+    assert ober._compute_slider_click_xy(120.0, (855, 621), (1065, 621)) == (1065, 621)
+
+    # Verify run_action_sequence accepts `type` alias and `sec` alias for wait
+    seq = ober.run_action_sequence([{"type": "wait", "sec": 0.01}])
+    assert seq["all_ok"] is True and seq["completed_count"] == 1
+    assert abs(seq["results"][0]["result"]["slept_sec"] - 0.01) < 1e-6
+
+
+def test_ober_cli_agent_native() -> None:
+    import tempfile
+    import ober_cli
+
+    assert ober_cli.parse_roi("0.1,0.2,0.3,0.4") == {"rx": 0.1, "ry": 0.2, "rw": 0.3, "rh": 0.4}
+    assert ober_cli.parse_roi("900,540,120,50") == {"x": 900, "y": 540, "w": 120, "h": 50}
+    assert ober_cli.parse_probe_points("960,520;960,600") == [[960, 520], [960, 600]]
+    assert "B2" in ober_cli._detect_architecture([{"process_name": "UnityVR.exe"}])
+    assert "A " in ober_cli._detect_architecture([{"process_name": "GUS.exe"}, {"process_name": "ModelManage.exe"}])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sess_file = str(Path(tmp) / "session.json")
+        proc_use = subprocess.run(
+            [sys.executable, str(SERVER_DIR / "ober_cli.py"), "--json", "--session-file", sess_file, "session", "use", "精馏综合拓展"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        used = json.loads(proc_use.stdout)
+        assert used["window_query"] == "精馏综合拓展"
+
+        proc_list = subprocess.run(
+            [sys.executable, str(SERVER_DIR / "ober_cli.py"), "--json", "--session-file", sess_file, "preset", "list"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        presets = json.loads(proc_list.stdout)
+        assert len(presets.get("presets", [])) >= 4
+
+        proc_calc = subprocess.run(
+            [
+                sys.executable,
+                str(SERVER_DIR / "ober_cli.py"),
+                "--json",
+                "calc",
+                "distillation-1522",
+                "--system", "ethanol-propanol",
+                "--wd-full", "62.29", "--ww-full", "12.86",
+                "--wd-part", "71.10", "--ww-part", "10.10", "--wf-part", "31.51",
+                "--l-lh", "9.72", "--d-lh", "2.46", "--t-feed", "38.2", "--np", "10",
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        calc_out = json.loads(proc_calc.stdout)
+        assert calc_out["NT_full"] == 3 and calc_out["NT_part"] == 5
 
 
 if __name__ == "__main__":
@@ -322,6 +457,8 @@ if __name__ == "__main__":
         test_extract_numbers_and_mmss,
         test_chem_calc_cli,
         test_json_configs_valid,
+        test_slider_jump_and_action_aliases,
+        test_ober_cli_agent_native,
     ]
     for fn in tests:
         fn()

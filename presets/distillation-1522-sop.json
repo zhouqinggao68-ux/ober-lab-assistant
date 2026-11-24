@@ -1,0 +1,191 @@
+{
+  "calibrated": true,
+  "experiment_id": "distillation-1522-sop",
+  "notes": "1522 精馏综合拓展3D虚拟仿真实验软件 (Hybrid ModelManage Items 1-8 / Pure B2 Items 9-17, UnityVR.exe 1914x1007). Atmospheric ethanol-propanol setpoints: VA25=55.7% (89L/h), 导热油加热=30.0% (1.50kW), VA07=30.2% (5.0L/h), 进料预热器=18.5% (38.2℃), 回流泵=27.5% (8.47L/h), 采出泵=21.0% (2.11L/h, R=4.01), VA20=62%. IMPORTANT: valve popup handwheels are at ry=0.47964 (y=515), NOT text labels at ry=0.52929 (y=565).",
+  "points": {
+    "chart_close_x": {
+      "label": "查看图表左上关闭红X (detect_ui_boxes 实测 31,60)",
+      "rx": 0.01463,
+      "ry": 0.02781
+    },
+    "chart_save": {
+      "label": "查看图表右上保存",
+      "rx": 0.95455,
+      "ry": 0.03972
+    },
+    "exit_confirm": {
+      "label": "退出确认确定",
+      "rx": 0.44462,
+      "ry": 0.55214
+    },
+    "file_manage_close": {
+      "label": "文件管理关闭X",
+      "rx": 0.69383,
+      "ry": 0.27507
+    },
+    "login_enter_system": {
+      "label": "登录页进入系统",
+      "rx": 0.50052,
+      "ry": 0.61569
+    },
+    "login_start": {
+      "label": "项目选择页右下启动",
+      "rx": 0.90909,
+      "ry": 0.88878
+    },
+    "quiz_close": {
+      "label": "实验分析关闭X",
+      "rx": 0.72518,
+      "ry": 0.18967
+    },
+    "quiz_confirm": {
+      "label": "实验分析提交确认确定",
+      "rx": 0.50000,
+      "ry": 0.56802
+    },
+    "quiz_submit": {
+      "label": "实验分析提交",
+      "rx": 0.71421,
+      "ry": 0.79643
+    },
+    "score_close": {
+      "label": "评分系统关闭X",
+      "rx": 0.98067,
+      "ry": 0.03476
+    },
+    "settings_close": {
+      "label": "系统设置关闭",
+      "rx": 0.93992,
+      "ry": 0.93347
+    },
+    "table_query": {
+      "label": "数据处理-数据查询",
+      "rx": 0.32863,
+      "ry": 0.72493
+    },
+    "table_submit_close": {
+      "label": "数据处理-提交并关闭",
+      "rx": 0.67137,
+      "ry": 0.72493
+    },
+    "top_chart": {
+      "label": "查看图表",
+      "rx": 0.50052,
+      "ry": 0.02483
+    },
+    "top_data": {
+      "label": "记录数据",
+      "rx": 0.39864,
+      "ry": 0.02483
+    },
+    "top_device": {
+      "label": "设备列表",
+      "rx": 0.44984,
+      "ry": 0.02483
+    },
+    "top_exit": {
+      "label": "退出",
+      "rx": 0.75444,
+      "ry": 0.02483
+    },
+    "top_file": {
+      "label": "文件管理",
+      "rx": 0.34796,
+      "ry": 0.02483
+    },
+    "top_home": {
+      "label": "返回主页",
+      "rx": 0.24556,
+      "ry": 0.02483
+    },
+    "top_intro": {
+      "label": "实验介绍",
+      "rx": 0.29728,
+      "ry": 0.02483
+    },
+    "top_quiz": {
+      "label": "实验分析",
+      "rx": 0.55068,
+      "ry": 0.02483
+    },
+    "top_report": {
+      "label": "生成报告",
+      "rx": 0.65308,
+      "ry": 0.02582
+    },
+    "top_score": {
+      "label": "评分系统",
+      "rx": 0.60188,
+      "ry": 0.02383
+    },
+    "top_settings": {
+      "label": "系统设置",
+      "rx": 0.70376,
+      "ry": 0.02483
+    },
+    "valve_3d_center": {
+      "label": "VA02/VA29/VA30/VA07/VA14/VA15/VA25 3D click",
+      "rx": 0.5,
+      "ry": 0.48461
+    },
+    "valve_3d_va03": {
+      "label": "VA03 3D click",
+      "rx": 0.46604,
+      "ry": 0.44687
+    },
+    "valve_3d_va08_on_va09": {
+      "label": "VA08 3D click (on VA09 camera frame)",
+      "rx": 0.38506,
+      "ry": 0.48461
+    },
+    "valve_3d_va09": {
+      "label": "VA09 3D click",
+      "rx": 0.5,
+      "ry": 0.52433
+    },
+    "valve_3d_va20": {
+      "label": "VA20 3D click",
+      "rx": 0.51463,
+      "ry": 0.52632
+    },
+    "valve_popup_close": {
+      "label": "调节阀弹窗红/绿手轮关 (y=515, 非y=565文字)",
+      "rx": 0.52508,
+      "ry": 0.47964
+    },
+    "valve_popup_neutral": {
+      "label": "调节阀弹窗标题栏中性区",
+      "rx": 0.50052,
+      "ry": 0.4002
+    },
+    "valve_popup_open": {
+      "label": "调节阀弹窗红/绿手轮开 (y=515, 非y=565文字)",
+      "rx": 0.47492,
+      "ry": 0.47964
+    },
+    "valve_popup_slider_0": {
+      "label": "调节阀滑条0% (855,621)",
+      "rx": 0.44514,
+      "ry": 0.58491
+    },
+    "valve_popup_slider_100": {
+      "label": "调节阀滑条100% (1065,621，线性插值 x=855+pct*2.1)",
+      "rx": 0.55486,
+      "ry": 0.58491
+    },
+    "valve_popup_x": {
+      "label": "调节阀弹窗关闭X",
+      "rx": 0.55225,
+      "ry": 0.39722
+    }
+  },
+  "rois": {
+    "bottom_task_bar": {
+      "rh": 0.07,
+      "rw": 1,
+      "rx": 0,
+      "ry": 0.93
+    }
+  },
+  "window_query": "精馏综合拓展"
+}

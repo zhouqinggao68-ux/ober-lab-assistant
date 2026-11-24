@@ -47,6 +47,12 @@ WHEEL_DELTA = 120
 VK_BACK = 0x08
 VK_RETURN = 0x0D
 VK_CONTROL = 0x11
+VK_MENU = 0x12
+SWP_NOSIZE = 0x0001
+SWP_NOMOVE = 0x0002
+SWP_SHOWWINDOW = 0x0040
+HWND_TOPMOST = -1
+HWND_NOTOPMOST = -2
 
 _ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
 
@@ -384,6 +390,27 @@ def _capture_target(
 
     is_fg = fg_hwnd == win.hwnd
 
+    def _capture_via_wgc() -> tuple[np.ndarray, tuple[int, int], tuple[int, int], WindowInfo | None, str, bool, str]:
+        img_wgc = _capture_wgc(win.hwnd)
+        fh, fw = img_wgc.shape[:2]
+        ew = win.ext_rect[2] - win.ext_rect[0]
+        eh = win.ext_rect[3] - win.ext_rect[1]
+        ww = win.win_rect[2] - win.win_rect[0]
+        wh = win.win_rect[3] - win.win_rect[1]
+        if abs(fw - ew) <= 4 and abs(fh - eh) <= 4:
+            origin = (win.ext_rect[0], win.ext_rect[1])
+        elif abs(fw - ww) <= 4 and abs(fh - wh) <= 4:
+            origin = (win.win_rect[0], win.win_rect[1])
+        else:
+            origin = win.ext_rect[:2]
+        return img_wgc, origin, win.client_origin, win, "wgc", is_fg, fg_title
+
+    if backend == "auto" and not is_fg and not win.is_minimized:
+        try:
+            return _capture_via_wgc()
+        except Exception as exc:
+            logger.warning("Background WGC fallback failed (%s), falling back to MSS: %s", win.title, exc)
+
     if backend != "wgc":
         cx, cy = win.client_origin
         cw, ch = win.client_size
@@ -392,19 +419,7 @@ def _capture_target(
             return img, (cx, cy), (cx, cy), win, "mss", is_fg, fg_title
         logger.warning("Window mss returned black frame (%s), trying WGC", win.title)
 
-    img = _capture_wgc(win.hwnd)
-    fh, fw = img.shape[:2]
-    ew = win.ext_rect[2] - win.ext_rect[0]
-    eh = win.ext_rect[3] - win.ext_rect[1]
-    ww = win.win_rect[2] - win.win_rect[0]
-    wh = win.win_rect[3] - win.win_rect[1]
-    if abs(fw - ew) <= 4 and abs(fh - eh) <= 4:
-        frame_origin = (win.ext_rect[0], win.ext_rect[1])
-    elif abs(fw - ww) <= 4 and abs(fh - wh) <= 4:
-        frame_origin = (win.win_rect[0], win.win_rect[1])
-    else:
-        frame_origin = win.ext_rect[:2]
-    return img, frame_origin, win.client_origin, win, "wgc", is_fg, fg_title
+    return _capture_via_wgc()
 
 
 def _resolve_roi_in_frame(
@@ -1000,8 +1015,28 @@ def _detect_ui_boxes_on_bgr(
     min_brightness: int = 228,
 ) -> dict[str, Any]:
     """Detect Unity input cells, radio circles, red close X buttons, or scrollbar thumbs and return screen coordinates."""
-    k = kind.lower().strip() or "input_boxes"
-    if k not in {"input_boxes", "radio_circles", "red_close", "scrollbar_thumb"}:
+    kind_aliases = {
+        "input_boxes": "input_boxes",
+        "inputs": "input_boxes",
+        "cells": "input_boxes",
+        "input": "input_boxes",
+        "radio_circles": "radio_circles",
+        "radio_boxes": "radio_circles",
+        "radios": "radio_circles",
+        "radio": "radio_circles",
+        "checkboxes": "radio_circles",
+        "red_close": "red_close",
+        "close": "red_close",
+        "close_x": "red_close",
+        "red_x": "red_close",
+        "scrollbar_thumb": "scrollbar_thumb",
+        "scrollbar": "scrollbar_thumb",
+        "scrollbars": "scrollbar_thumb",
+        "thumb": "scrollbar_thumb",
+    }
+    raw_k = kind.lower().strip() or "input_boxes"
+    k = kind_aliases.get(raw_k)
+    if k is None:
         raise ValueError("kind 必须是 'input_boxes'、'radio_circles'、'red_close' 或 'scrollbar_thumb'")
 
     cw_client, ch_client = client_size
@@ -1223,6 +1258,8 @@ def watch_value_threshold(
     companion_rois: dict[str, dict[str, Any]] | None = None,
     led_color: str = "",
     parse_mode: str = "number",
+    valid_min: float | None = None,
+    valid_max: float | None = None,
 ) -> dict[str, Any]:
     """Locally poll a numeric DCS gauge, 7-segment LED, or MM:SS timer ROI until a condition holds."""
     op = target_op.lower().strip()
@@ -1245,7 +1282,7 @@ def watch_value_threshold(
     def _compute_trend() -> float | None:
         if first_sample is None:
             return None
-        valid_hist = [(h["t"], h["val"]) for h in history if h["val"] is not None]
+        valid_hist = [(h["t"], h["val"]) for h in history if h["val"] is not None and not h.get("ignored_glitch")]
         if not valid_hist:
             return None
         t_end, v_end = valid_hist[-1]
@@ -1286,10 +1323,25 @@ def watch_value_threshold(
 
         last_is_fg = bool(res.get("is_foreground", True))
         elapsed = round(time.monotonic() - start, 2)
-        if val is not None and first_sample is None:
-            first_sample = (elapsed, float(val))
-        history.append({"t": elapsed, "val": val, "text": txt})
+        glitch_ignored = False
+        if val is not None and (
+            (valid_min is not None and float(val) < float(valid_min))
+            or (valid_max is not None and float(val) > float(valid_max))
+        ):
+            glitch_ignored = True
+
+        hist_entry: dict[str, Any] = {"t": elapsed, "val": val, "text": txt}
+        if glitch_ignored:
+            hist_entry["ignored_glitch"] = True
+        else:
+            if val is not None and first_sample is None:
+                first_sample = (elapsed, float(val))
+        history.append(hist_entry)
         history = history[-20:]
+
+        if glitch_ignored:
+            time.sleep(max(0.15, poll_interval_sec))
+            continue
 
         matched = False
         if val is not None:
@@ -1305,7 +1357,11 @@ def watch_value_threshold(
                 lo, hi = min(target_value, target_value_max), max(target_value, target_value_max)
                 matched = lo <= val <= hi
             elif op == "stable":
-                prev_vals = [h["val"] for h in history[:-1] if h["val"] is not None]
+                prev_vals = [
+                    h["val"]
+                    for h in history[:-1]
+                    if h["val"] is not None and not h.get("ignored_glitch")
+                ]
                 matched = bool(prev_vals) and abs(val - prev_vals[-1]) <= max(1e-6, tolerance)
 
         consecutive = consecutive + 1 if matched else 0
@@ -1326,6 +1382,8 @@ def watch_value_threshold(
             }
         time.sleep(max(0.15, poll_interval_sec))
 
+    valid_vals = [h["val"] for h in history if h["val"] is not None and not h.get("ignored_glitch")]
+    fallback_val = valid_vals[-1] if valid_vals else (history[-1]["val"] if history else None)
     return {
         "satisfied": False,
         "elapsed_sec": round(time.monotonic() - start, 2),
@@ -1334,7 +1392,7 @@ def watch_value_threshold(
         "is_foreground": last_is_fg,
         "parse_mode": mode,
         "led_color": led or None,
-        "final_value": history[-1]["val"] if history else None,
+        "final_value": fallback_val,
         "trend_per_min": _compute_trend(),
         "consecutive_samples": consecutive,
         "companion_readings": _read_companion_rois(window_query, companion_rois, ensure_foreground, backend),
@@ -1522,24 +1580,73 @@ def resolve_preset_point(preset_id: str, target_name: str, window_query: str = "
     raise KeyError(f"Preset '{preset_id}' 中未找到 '{target_name}'。")
 
 
-def _bring_hwnd_to_front(hwnd: int) -> None:
-    """Restore if minimized and bring target HWND to the foreground."""
+def _bring_hwnd_to_front(hwnd: int) -> bool:
+    """Restore if minimized and escalate across Win32 foreground-lock strategies until foreground."""
     if win32gui.IsIconic(hwnd):
         win32gui.ShowWindow(hwnd, 9)  # SW_RESTORE
     with contextlib.suppress(Exception):
         win32gui.SetForegroundWindow(hwnd)
+    if _get_foreground_info()[0] == hwnd:
+        return True
+
+    # Strategy 2: Attach input queues between current, foreground, and target threads.
+    cur_tid = int(_kernel32.GetCurrentThreadId())
+    fg_hwnd = _get_foreground_info()[0]
+    fg_tid = int(_user32.GetWindowThreadProcessId(fg_hwnd, None)) if fg_hwnd else 0
+    tgt_tid = int(_user32.GetWindowThreadProcessId(hwnd, None))
+    attached: list[int] = []
+    try:
+        for tid in (fg_tid, tgt_tid):
+            if tid and tid != cur_tid and tid not in attached:
+                if _user32.AttachThreadInput(cur_tid, tid, True):
+                    attached.append(tid)
+        with contextlib.suppress(Exception):
+            win32gui.ShowWindow(hwnd, 5)  # SW_SHOW
+            win32gui.BringWindowToTop(hwnd)
+            win32gui.SetForegroundWindow(hwnd)
+    finally:
+        for tid in reversed(attached):
+            with contextlib.suppress(Exception):
+                _user32.AttachThreadInput(cur_tid, tid, False)
+    if _get_foreground_info()[0] == hwnd:
+        return True
+
+    # Strategy 3: Brief Z-order HWND_TOPMOST -> HWND_NOTOPMOST toggle + BringWindowToTop.
+    flags = SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW
+    with contextlib.suppress(Exception):
+        _user32.SetWindowPos(wt.HWND(hwnd), wt.HWND(HWND_TOPMOST), 0, 0, 0, 0, flags)
+        _user32.SetWindowPos(wt.HWND(hwnd), wt.HWND(HWND_NOTOPMOST), 0, 0, 0, 0, flags)
+        win32gui.BringWindowToTop(hwnd)
+        win32gui.SetForegroundWindow(hwnd)
+    if _get_foreground_info()[0] == hwnd:
+        return True
+
+    # Strategy 4: Benign Alt+Ctrl chord to unlock foreground switching without opening menu bars.
+    with contextlib.suppress(Exception):
+        alt_scan = int(_user32.MapVirtualKeyW(VK_MENU, 0))
+        ctrl_scan = int(_user32.MapVirtualKeyW(VK_CONTROL, 0))
+        _send_inputs(
+            [
+                _make_key_input(vk=VK_MENU, scan=alt_scan, flags=0),
+                _make_key_input(vk=VK_CONTROL, scan=ctrl_scan, flags=0),
+                _make_key_input(vk=VK_CONTROL, scan=ctrl_scan, flags=KEYEVENTF_KEYUP),
+                _make_key_input(vk=VK_MENU, scan=alt_scan, flags=KEYEVENTF_KEYUP),
+            ]
+        )
+        time.sleep(0.02)
+        win32gui.SetForegroundWindow(hwnd)
+        win32gui.BringWindowToTop(hwnd)
+    return _get_foreground_info()[0] == hwnd
 
 
 def _activate_window_info(win: WindowInfo) -> WindowInfo:
     """Restore if minimized or bring to foreground if unfocused, skipping sleep when already active."""
     fg_hwnd, _ = _get_foreground_info()
-    if win.is_minimized:
+    if win.is_minimized or fg_hwnd != win.hwnd:
+        was_minimized = win.is_minimized
         _bring_hwnd_to_front(win.hwnd)
-        time.sleep(0.12)
+        time.sleep(0.12 if was_minimized else 0.06)
         return _inspect_hwnd(win.hwnd, include_minimized=True) or win
-    if fg_hwnd != win.hwnd:
-        _bring_hwnd_to_front(win.hwnd)
-        time.sleep(0.05)
     return win
 
 
@@ -1551,7 +1658,17 @@ def bring_window_to_front(window_query: str) -> dict[str, Any]:
     if win is None:
         raise ValueError("window_query 不能为空")
     win = _activate_window_info(win)
-    return {"activated": True, "window": win.to_dict()}
+    fg_hwnd, fg_title = _get_foreground_info()
+    is_fg = fg_hwnd == win.hwnd
+    out: dict[str, Any] = {
+        "activated": is_fg,
+        "is_foreground": is_fg,
+        "foreground_title": fg_title,
+        "window": win.to_dict(),
+    }
+    if not is_fg:
+        out["warning"] = "Windows 前台锁阻止切换，视觉读取将自动回退 WGC，键鼠点击前请确认目标窗口可见"
+    return out
 
 
 def _activate_if_requested(window_query: str) -> WindowInfo | None:
@@ -1746,11 +1863,11 @@ def hover_and_ocr(
 
 
 def _normalize_valve_state(raw: str) -> str | None:
-    """Normalize 已开/已打开 -> '已开' and 已关/已关闭 -> '已关'."""
+    """Normalize 开/已开/已打开 -> '已开' and 关/已关/已关闭 -> '已关'."""
     s = raw.strip()
-    if s in {"已开", "已打开", "打开"}:
+    if s in {"已开", "已打开", "打开", "开启", "开", "开着"}:
         return "已开"
-    if s in {"已关", "已关闭", "关闭"}:
+    if s in {"已关", "已关闭", "关闭", "关", "关着"}:
         return "已关"
     return None
 
@@ -1759,18 +1876,19 @@ def _parse_valve_tooltip_state(joined_text: str, items: list[dict[str, Any]], ta
     """Extract normalized '已开' or '已关' specifically for ASCII or Chinese target_tag from tooltip OCR."""
     tag_u = target_tag.strip().upper()
     texts = [str(it.get("text", "")) for it in items] + [joined_text]
+    state_pat = r"(已打开|已开|打开|开启|开|已关闭|已关|关闭|关)(?![\u4e00-\u9fffA-Za-z0-9])"
     for txt in texts:
-        m = re.search(rf"{re.escape(tag_u)}\s*[:：]\s*(已打开|已开|已关闭|已关)", txt.upper())
+        m = re.search(rf"{re.escape(tag_u)}\s*[:：]\s*{state_pat}", txt.upper())
         if m:
             return _normalize_valve_state(m.group(1))
     has_cjk_tag = bool(re.search(r"[\u4e00-\u9fff]", tag_u))
     for txt in texts:
         u = txt.upper()
-        other = re.search(r"([A-Z]{2}\d{3})\s*[:：]\s*(已打开|已开|已关闭|已关)", u)
+        other = re.search(rf"([A-Z]{{1,3}}\d{{2,3}})\s*[:：]\s*{state_pat}", u)
         if other and other.group(1) != tag_u:
             continue
         if has_cjk_tag:
-            other_cn = re.search(r"([\u4e00-\u9fff]{2,10})\s*[:：]\s*(已打开|已开|已关闭|已关)", u)
+            other_cn = re.search(rf"([\u4e00-\u9fff]{{2,10}})\s*[:：]\s*{state_pat}", u)
             if other_cn:
                 found_cn = other_cn.group(1)
                 if tag_u not in found_cn and found_cn not in tag_u:
@@ -1781,6 +1899,9 @@ def _parse_valve_tooltip_state(joined_text: str, items: list[dict[str, Any]], ta
             return "已开"
         if has_close and not has_open:
             return "已关"
+        m_short = re.search(r"[:：]\s*(开|关)(?![\u4e00-\u9fffA-Za-z0-9])", u)
+        if m_short:
+            return _normalize_valve_state(m_short.group(1))
     return None
 
 
@@ -1792,24 +1913,28 @@ def click_3d_valve_verified(
     probe_points: list[list[int]],
     hover_delay_sec: float = 0.18,
     post_click_sleep_sec: float = 0.25,
+    press_duration_sec: float = 0.04,
 ) -> dict[str, Any]:
     """Idempotently set a 3D Unity ball/hand valve or switch by probing hover tooltips before & after click."""
     state_map = {
         "open": "已开",
         "on": "已开",
+        "开": "已开",
+        "开启": "已开",
         "已开": "已开",
         "已打开": "已开",
         "打开": "已开",
         "close": "已关",
         "closed": "已关",
         "off": "已关",
+        "关": "已关",
         "已关": "已关",
         "已关闭": "已关",
         "关闭": "已关",
     }
     want = state_map.get(desired_state.strip().lower())
     if want is None:
-        raise ValueError("desired_state 必须是 'open'/'已开'/'已打开' 或 'close'/'已关'/'已关闭'")
+        raise ValueError("desired_state 必须是 'open'/'开'/'已开'/'已打开' 或 'close'/'关'/'已关'/'已关闭'")
     if not probe_points:
         raise ValueError("probe_points 不能为空")
 
@@ -1834,7 +1959,7 @@ def click_3d_valve_verified(
             "changed": False,
             "already_in_state": False,
             "verified": False,
-            "error": f"未能在给定候选点识别到 {target_tag} 的已开/已打开/已关/已关闭提示",
+            "error": f"未能在给定候选点识别到 {target_tag} 的开/关/已开/已关/已打开/已关闭提示",
             "probes": probe_log,
         }
 
@@ -1850,7 +1975,13 @@ def click_3d_valve_verified(
             "probes": probe_log,
         }
 
-    fast_click(x=matched_pt[0], y=matched_pt[1], window_query=window_query, hover_delay_sec=0.12)
+    fast_click(
+        x=matched_pt[0],
+        y=matched_pt[1],
+        window_query=window_query,
+        hover_delay_sec=0.12,
+        press_duration_sec=float(press_duration_sec),
+    )
     time.sleep(max(0.05, float(post_click_sleep_sec)))
 
     # Re-probe all candidate points because the 90-degree handle rotation shifts its hitbox.
@@ -1882,8 +2013,15 @@ def click_3d_valve_verified(
     }
 
 
-def _compute_valve_step(current_pct: float, target_pct: float, tolerance: float = 0.6) -> dict[str, Any]:
-    """Choose the next valve popup adjustment action (done / hold_endpoint / discrete_clicks / ramp_hold)."""
+def _compute_valve_step(
+    current_pct: float,
+    target_pct: float,
+    tolerance: float = 0.6,
+    rate_pct_per_sec: float | None = None,
+    overshoot_count: int = 0,
+    last_duration_sec: float | None = None,
+) -> dict[str, Any]:
+    """Choose the next valve popup adjustment action with optional rate calibration & overshoot damping."""
     diff = float(target_pct) - float(current_pct)
     if abs(diff) <= max(0.0, float(tolerance)):
         return {"action": "done", "direction": None, "diff": round(diff, 3)}
@@ -1895,18 +2033,28 @@ def _compute_valve_step(current_pct: float, target_pct: float, tolerance: float 
             "press_duration_sec": 2.5,
             "diff": round(diff, 3),
         }
-    if abs(diff) <= 8.0:
+    est_time = (abs(diff) / float(rate_pct_per_sec)) if (rate_pct_per_sec and float(rate_pct_per_sec) > 5.0) else None
+    if abs(diff) <= 8.0 or (est_time is not None and est_time < 0.16):
+        max_clicks = 3 if overshoot_count > 0 else 5
+        scale = 0.6 if overshoot_count > 0 else 1.0
         return {
             "action": "discrete_clicks",
             "direction": direction,
-            "count": min(5, max(1, round(abs(diff)))),
+            "count": min(max_clicks, max(1, round(abs(diff) * scale))),
             "press_duration_sec": 0.05,
             "diff": round(diff, 3),
         }
+    if est_time is not None:
+        damping = 0.55 if overshoot_count > 0 else 0.78
+        dur = max(0.06, min(1.2, est_time * damping))
+    elif overshoot_count > 0 and last_duration_sec and float(last_duration_sec) > 0:
+        dur = max(0.06, min(1.2, float(last_duration_sec) * 0.45))
+    else:
+        dur = min(1.2, 0.26 + abs(diff) * 0.0085)
     return {
         "action": "ramp_hold",
         "direction": direction,
-        "press_duration_sec": round(min(1.2, 0.26 + abs(diff) * 0.0085), 3),
+        "press_duration_sec": round(dur, 3),
         "diff": round(diff, 3),
     }
 
@@ -1925,6 +2073,18 @@ def _resolve_win_norm_point(win: WindowInfo | None, rx: float, ry: float) -> tup
         )
 
 
+def _compute_slider_click_xy(
+    target_pct: float,
+    zero_xy: tuple[int, int],
+    full_xy: tuple[int, int],
+) -> tuple[int, int]:
+    """Linearly interpolate a 0-100% valve slider click coordinate."""
+    frac = max(0.0, min(1.0, float(target_pct) / 100.0))
+    x = int(round(zero_xy[0] + frac * (full_xy[0] - zero_xy[0])))
+    y = int(round(zero_xy[1] + frac * (full_xy[1] - zero_xy[1])))
+    return x, y
+
+
 @mcp.tool()
 def adjust_valve_popup(
     window_query: str,
@@ -1937,19 +2097,35 @@ def adjust_valve_popup(
     pct_roi: dict[str, Any] | None = None,
     max_iterations: int = 12,
     close_when_done: bool = False,
+    slider_zero_xy: list[int] | None = None,
+    slider_full_xy: list[int] | None = None,
+    use_slider_jump: bool = False,
 ) -> dict[str, Any]:
-    """Closed-loop tune an already-open Unity valve popup (%) to target_pct with neutral title hover guard."""
+    """Closed-loop tune an already-open Unity valve popup (%) to target_pct with optional slider direct-jump and neutral title hover guard."""
     _enable_dpi_awareness()
     win = _activate_if_requested(window_query)
-    open_pt = (int(open_xy[0]), int(open_xy[1])) if open_xy else _resolve_win_norm_point(win, 0.47126, 0.47964)
-    close_pt = (int(close_xy[0]), int(close_xy[1])) if close_xy else _resolve_win_norm_point(win, 0.52612, 0.47964)
-    neutral_pt = (int(neutral_xy[0]), int(neutral_xy[1])) if neutral_xy else _resolve_win_norm_point(win, 0.50000, 0.39722)
+    open_pt = (int(open_xy[0]), int(open_xy[1])) if open_xy else _resolve_win_norm_point(win, 0.47492, 0.47964)
+    close_pt = (int(close_xy[0]), int(close_xy[1])) if close_xy else _resolve_win_norm_point(win, 0.52508, 0.47964)
+    neutral_pt = (int(neutral_xy[0]), int(neutral_xy[1])) if neutral_xy else _resolve_win_norm_point(win, 0.50052, 0.40020)
     close_popup_pt = (
         (int(close_popup_xy[0]), int(close_popup_xy[1]))
         if close_popup_xy
-        else _resolve_win_norm_point(win, 0.55434, 0.39523)
+        else _resolve_win_norm_point(win, 0.55225, 0.39722)
     )
     eff_roi = pct_roi or {"rx": 0.46, "ry": 0.54, "rw": 0.08, "rh": 0.06}
+
+    slider_enabled = bool(use_slider_jump or slider_zero_xy or slider_full_xy)
+    slider_zero_pt = (
+        (int(slider_zero_xy[0]), int(slider_zero_xy[1]))
+        if slider_zero_xy
+        else _resolve_win_norm_point(win, 0.44514, 0.58491)
+    )
+    slider_full_pt = (
+        (int(slider_full_xy[0]), int(slider_full_xy[1]))
+        if slider_full_xy
+        else _resolve_win_norm_point(win, 0.55486, 0.58491)
+    )
+    slider_jumped = False
 
     def _read_pct() -> tuple[float | None, str]:
         _activate_if_requested(window_query)
@@ -1969,21 +2145,92 @@ def adjust_valve_popup(
 
     history: list[dict[str, Any]] = []
     achieved = False
+    stalled = False
+    diagnostic: str | None = None
     final_pct: float | None = None
+    prev_pct: float | None = None
+    prev_dir: str | None = None
+    prev_action: str | None = None
+    prev_dur: float | None = None
+    acted_since_read = False
+    rate_est: float | None = None
+    overshoot_count = 0
+    stall_count = 0
 
     for it_idx in range(max(1, int(max_iterations))):
         cur_pct, raw_txt = _read_pct()
         if cur_pct is None:
             history.append({"iter": it_idx, "pct": None, "raw_text": raw_txt, "action": "retry_ocr"})
+            acted_since_read = False
             time.sleep(0.2)
             continue
 
         final_pct = float(cur_pct)
-        step = _compute_valve_step(final_pct, target_pct, tolerance=tolerance)
-        history.append({"iter": it_idx, "pct": final_pct, **step})
+        if acted_since_read and prev_pct is not None:
+            delta = abs(final_pct - prev_pct)
+            if delta < 0.05:
+                stall_count += 1
+            else:
+                stall_count = 0
+            if (
+                prev_action == "ramp_hold"
+                and prev_dur
+                and prev_dur > 0
+                and 0.5 < final_pct < 99.5
+                and 0.5 < prev_pct < 99.5
+                and delta >= 2.0
+            ):
+                inst_rate = delta / float(prev_dur)
+                rate_est = (0.5 * rate_est + 0.5 * inst_rate) if rate_est else inst_rate
+
+        if slider_enabled and not slider_jumped and abs(float(target_pct) - final_pct) > max(float(tolerance), 2.0):
+            sx, sy = _compute_slider_click_xy(target_pct, slider_zero_pt, slider_full_pt)
+            fast_click(x=sx, y=sy, window_query=window_query, hover_delay_sec=0.05, press_duration_sec=0.05)
+            history.append(
+                {
+                    "iter": it_idx,
+                    "pct": final_pct,
+                    "action": "slider_jump",
+                    "clicked": [sx, sy],
+                    "diff": round(float(target_pct) - final_pct, 2),
+                }
+            )
+            slider_jumped = True
+            prev_pct = final_pct
+            prev_action = "slider_jump"
+            prev_dur = 0.05
+            acted_since_read = True
+            time.sleep(0.25)
+            continue
+
+        desired_dir = (
+            ("open" if float(target_pct) > final_pct else "close")
+            if abs(float(target_pct) - final_pct) > tolerance
+            else None
+        )
+        if prev_dir is not None and desired_dir is not None and desired_dir != prev_dir:
+            overshoot_count += 1
+
+        step = _compute_valve_step(
+            final_pct,
+            target_pct,
+            tolerance=tolerance,
+            rate_pct_per_sec=rate_est,
+            overshoot_count=overshoot_count,
+            last_duration_sec=prev_dur,
+        )
         if step["action"] == "done":
+            history.append({"iter": it_idx, "pct": final_pct, **step})
             achieved = True
             break
+
+        if acted_since_read and stall_count >= 3:
+            stalled = True
+            diagnostic = "阀门开度连续 3 次未变化，请核对 open_xy/close_xy 是否点中阀门图标（如 1522 为 y=515 红/绿手轮，非 y=565 文字）且弹窗处于激活状态"
+            history.append({"iter": it_idx, "pct": final_pct, "action": "stalled", "diff": step["diff"]})
+            break
+
+        history.append({"iter": it_idx, "pct": final_pct, **step})
 
         btn = open_pt if step["direction"] == "open" else close_pt
         if step["action"] == "discrete_clicks":
@@ -2005,9 +2252,14 @@ def adjust_valve_popup(
                 hover_delay_sec=0.05,
                 press_duration_sec=float(step["press_duration_sec"]),
             )
+        prev_pct = final_pct
+        prev_dir = step["direction"]
+        prev_action = step["action"]
+        prev_dur = float(step["press_duration_sec"])
+        acted_since_read = True
         time.sleep(0.25)
 
-    if not achieved:
+    if not achieved and not stalled:
         last_pct, _ = _read_pct()
         if last_pct is not None:
             final_pct = float(last_pct)
@@ -2018,14 +2270,19 @@ def adjust_valve_popup(
         fast_click(x=close_popup_pt[0], y=close_popup_pt[1], window_query=window_query)
         popup_closed = True
 
-    return {
+    result: dict[str, Any] = {
         "achieved": achieved,
         "target_pct": float(target_pct),
         "final_pct": final_pct,
         "iterations": len(history),
         "popup_closed": popup_closed,
+        "stalled": stalled,
+        "observed_rate_pct_per_sec": round(rate_est, 2) if rate_est else None,
         "history": history,
     }
+    if diagnostic:
+        result["diagnostic"] = diagnostic
+    return result
 
 
 @mcp.tool()
@@ -2071,23 +2328,38 @@ def fast_type(
 
 
 @mcp.tool()
-def run_action_sequence(actions: list[dict[str, Any]], stop_on_error: bool = True) -> dict[str, Any]:
-    """Execute a local serial batch of window/click/type/drag/ocr/read_led steps in a single MCP call."""
+def run_action_sequence(
+    actions: list[dict[str, Any]],
+    stop_on_error: bool = True,
+    default_window_query: str = "",
+) -> dict[str, Any]:
+    """Execute a local serial batch of window/click/move/type/drag/scroll/valve/ocr/read_led steps in a single MCP call."""
     results: list[dict[str, Any]] = []
     all_ok = True
 
     for idx, act in enumerate(actions):
-        op = str(act.get("op", "")).strip().lower()
+        op = str(act.get("op") or act.get("type") or "").strip().lower()
+        wq = str(act.get("window_query", "") or default_window_query).strip()
         try:
             if op == "activate":
-                res = bring_window_to_front(window_query=str(act["window_query"]))
+                if not wq:
+                    raise ValueError("activate 动作缺少 window_query")
+                res = bring_window_to_front(window_query=wq)
+            elif op == "move":
+                _enable_dpi_awareness()
+                _activate_if_requested(wq)
+                _user32.SetCursorPos(int(act["x"]), int(act["y"]))
+                delay = max(0.0, float(act.get("hover_delay_sec", 0.05)))
+                if delay > 0:
+                    time.sleep(delay)
+                res = {"moved": [int(act["x"]), int(act["y"])]}
             elif op == "click":
                 res = fast_click(
                     x=int(act["x"]),
                     y=int(act["y"]),
                     button=str(act.get("button", "left")),
                     clicks=int(act.get("clicks", 1)),
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     hover_delay_sec=float(act.get("hover_delay_sec", 0.08)),
                     press_duration_sec=float(act.get("press_duration_sec", 0.04)),
                 )
@@ -2098,7 +2370,7 @@ def run_action_sequence(actions: list[dict[str, Any]], stop_on_error: bool = Tru
                     text=str(act["text"]),
                     clear=bool(act.get("clear", True)),
                     press_enter=bool(act.get("press_enter", True)),
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                 )
             elif op == "drag":
                 res = drag_mouse(
@@ -2109,7 +2381,7 @@ def run_action_sequence(actions: list[dict[str, Any]], stop_on_error: bool = Tru
                     button=str(act.get("button", "left")),
                     duration_sec=float(act.get("duration_sec", 0.25)),
                     steps=int(act.get("steps", 12)),
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                 )
             elif op == "scroll":
                 res = scroll_mouse(
@@ -2117,22 +2389,39 @@ def run_action_sequence(actions: list[dict[str, Any]], stop_on_error: bool = Tru
                     y=int(act["y"]),
                     direction=str(act.get("direction", "down")),
                     notches=int(act.get("notches", 6)),
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                 )
             elif op == "click_valve":
                 res = click_3d_valve_verified(
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     target_tag=str(act["target_tag"]),
                     desired_state=str(act["desired_state"]),
                     probe_points=act["probe_points"],
                     hover_delay_sec=float(act.get("hover_delay_sec", 0.18)),
                     post_click_sleep_sec=float(act.get("post_click_sleep_sec", 0.25)),
+                    press_duration_sec=float(act.get("press_duration_sec", 0.04)),
+                )
+            elif op == "adjust_valve":
+                res = adjust_valve_popup(
+                    window_query=wq,
+                    target_pct=float(act["target_pct"]),
+                    tolerance=float(act.get("tolerance", 0.6)),
+                    open_xy=act.get("open_xy"),
+                    close_xy=act.get("close_xy"),
+                    neutral_xy=act.get("neutral_xy"),
+                    close_popup_xy=act.get("close_popup_xy"),
+                    pct_roi=act.get("pct_roi"),
+                    max_iterations=int(act.get("max_iterations", 12)),
+                    close_when_done=bool(act.get("close_when_done", False)),
+                    slider_zero_xy=act.get("slider_zero_xy"),
+                    slider_full_xy=act.get("slider_full_xy"),
+                    use_slider_jump=bool(act.get("use_slider_jump", False)),
                 )
             elif op == "hover_ocr":
                 res = hover_and_ocr(
                     x=int(act["x"]),
                     y=int(act["y"]),
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     roi=act.get("roi"),
                     hover_delay_sec=float(act.get("hover_delay_sec", 0.18)),
                     box_width=int(act.get("box_width", 380)),
@@ -2140,28 +2429,46 @@ def run_action_sequence(actions: list[dict[str, Any]], stop_on_error: bool = Tru
                 )
             elif op == "ocr":
                 res = ocr_window_or_roi(
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     roi=act.get("roi"),
                     scale=float(act.get("scale", 2.0)),
                     invert=bool(act.get("invert", False)),
                     numeric_only=bool(act.get("numeric_only", False)),
+                    backend=str(act.get("backend", "auto")),
+                    ensure_foreground=bool(act.get("ensure_foreground", False)),
+                )
+            elif op == "detect_boxes":
+                res = detect_ui_boxes(
+                    window_query=wq,
+                    roi=act.get("roi"),
+                    kind=str(act.get("kind", "input_boxes")),
+                    min_brightness=int(act.get("min_brightness", 228)),
+                    backend=str(act.get("backend", "auto")),
+                    ensure_foreground=bool(act.get("ensure_foreground", False)),
+                )
+            elif op == "capture":
+                res = capture_window_wgc(
+                    window_query=wq,
+                    save_path=str(act.get("save_path", "")),
+                    backend=str(act.get("backend", "auto")),
                     ensure_foreground=bool(act.get("ensure_foreground", False)),
                 )
             elif op == "read_led":
                 res = read_seven_segment_roi(
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     roi=act.get("roi"),
                     color=str(act.get("color", "red")),
                     save_mask_crop=bool(act.get("save_mask_crop", False)),
                     ensure_foreground=bool(act.get("ensure_foreground", False)),
                 )
-            elif op == "sleep":
-                secs = max(0.0, min(15.0, float(act.get("seconds", 0.5))))
+            elif op in {"sleep", "wait"}:
+                raw_secs = act.get("seconds") if act.get("seconds") is not None else act.get("sec", 0.5)
+                secs = max(0.0, min(15.0, float(raw_secs)))
                 time.sleep(secs)
                 res = {"slept_sec": secs}
             elif op == "wait_stable":
                 res = watch_region_until_stable(
-                    window_query=str(act.get("window_query", "")),
+                    window_query=wq,
                     roi=act.get("roi"),
                     stable_duration_sec=float(act.get("stable_duration_sec", 0.8)),
                     timeout_sec=float(act.get("timeout_sec", 5.0)),

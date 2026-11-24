@@ -1,7 +1,7 @@
 [project]
 name = "ober-ocr-mcp"
-version = "0.5.0"
-description = "Standalone local WGC/MSS + RapidOCR + 7-segment LED + closed-loop valve/color watcher MCP server for OBER chemical simulation experiments."
+version = "0.7.0"
+description = "Standalone local WGC/MSS + RapidOCR + 7-segment LED + closed-loop valve/color watcher MCP server & CLI-Anything compatible Agent-Native CLI for OBER chemical simulation experiments."
 requires-python = ">=3.12"
 dependencies = [
     "fastmcp>=4.0",
@@ -17,3 +17,8 @@ dependencies = [
 
 [project.scripts]
 ober-ocr-mcp = "ober_ocr_mcp:main"
+ober-cli = "ober_cli:main"
+cli-anything-ober = "ober_cli:main"
+
+[tool.setuptools]
+py-modules = ["ober_ocr_mcp", "ober_cli"]

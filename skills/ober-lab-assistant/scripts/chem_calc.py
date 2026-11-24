@@ -8,7 +8,7 @@ import json
 import math
 import re
 import sys
-from typing import Iterable
+from typing import Any, Iterable
 
 
 def _interp_table(temp_c: float, table: dict[float, float]) -> float:
@@ -273,6 +273,188 @@ def calc_acetone_absorption(
     }
 
 
+_DIST1522_SYSTEMS: dict[str, dict[str, Any]] = {
+    "ethanol-propanol": {
+        "label": "乙醇-正丙醇",
+        "M1": 46.0,
+        "M2": 60.0,
+        "tb_coeffs": (9.1389, -27.861, 97.359),
+        "cp1": {20.0: 2.38, 30.0: 2.46, 40.0: 2.55, 50.0: 2.65, 60.0: 2.76, 70.0: 2.88, 80.0: 3.01, 90.0: 3.14, 100.0: 3.29},
+        "cp2": {20.0: 2.35, 30.0: 2.43, 40.0: 2.49, 50.0: 2.59, 60.0: 2.69, 70.0: 2.79, 80.0: 2.89, 90.0: 2.92, 100.0: 2.96},
+        "r1": {20.0: 953.21, 30.0: 936.03, 40.0: 918.12, 50.0: 899.31, 60.0: 879.77, 70.0: 859.32, 80.0: 838.05, 90.0: 815.79, 100.0: 792.52},
+        "r2": {20.0: 814.8, 30.0: 801.42, 40.0: 787.42, 50.0: 772.86, 60.0: 757.6, 70.0: 741.78, 80.0: 725.34, 90.0: 708.2, 100.0: 690.3},
+        "vle_xs": [0.0, 0.126, 0.188, 0.210, 0.358, 0.461, 0.546, 0.600, 0.663, 0.884, 1.0],
+        "vle_ys": [0.0, 0.240, 0.318, 0.349, 0.550, 0.650, 0.711, 0.760, 0.799, 0.914, 1.0],
+    },
+    "ethanol-water": {
+        "label": "乙醇-水",
+        "M1": 46.0,
+        "M2": 18.0,
+        "tb_coeffs": (9.4673, -28.012, 97.365),
+        "cp1": {20.0: 2.38, 30.0: 2.46, 40.0: 2.55, 50.0: 2.65, 60.0: 2.76, 70.0: 2.88, 80.0: 3.01, 90.0: 3.14, 100.0: 3.29},
+        "cp2": {20.0: 4.1889, 30.0: 4.1807, 40.0: 4.1766, 50.0: 4.1767, 60.0: 4.1803, 70.0: 4.1868, 80.0: 4.1957, 90.0: 4.2065, 100.0: 4.2192},
+        "r1": {20.0: 953.21, 30.0: 936.03, 40.0: 918.12, 50.0: 899.31, 60.0: 879.77, 70.0: 859.32, 80.0: 838.05, 90.0: 815.79, 100.0: 792.52},
+        "r2": {20.0: 2453.6, 30.0: 2430.1, 40.0: 2406.3, 50.0: 2382.4, 60.0: 2358.1, 70.0: 2333.6, 80.0: 2308.3, 90.0: 2282.8, 100.0: 2256.8},
+    },
+    "benzene-toluene": {
+        "label": "苯-甲苯",
+        "M1": 78.11,
+        "M2": 92.14,
+        "tb_coeffs": (11.6317, -42.050, 109.467),
+        "cp1": {20.0: 1.6756, 30.0: 1.7126, 40.0: 1.7496, 50.0: 1.7866, 60.0: 1.8236, 70.0: 1.8606, 80.0: 1.8976, 90.0: 1.9346, 100.0: 1.9716, 110.0: 2.0086, 120.0: 2.0456},
+        "cp2": {20.0: 1.688, 30.0: 1.726, 40.0: 1.764, 50.0: 1.802, 60.0: 1.84, 70.0: 1.878, 80.0: 1.916, 90.0: 1.954, 100.0: 1.992, 110.0: 2.03, 120.0: 2.068},
+        "r1": {20.0: 434.288, 30.0: 427.167, 40.0: 420.046, 50.0: 412.925, 60.0: 405.804, 70.0: 398.683, 80.0: 391.562, 90.0: 384.441, 100.0: 377.32, 110.0: 370.199, 120.0: 363.078},
+        "r2": {20.0: 413.096, 30.0: 407.219, 40.0: 401.342, 50.0: 395.465, 60.0: 389.588, 70.0: 383.711, 80.0: 377.834, 90.0: 371.957, 100.0: 366.08, 110.0: 360.203, 120.0: 354.326},
+    },
+}
+
+
+def _wt_to_mol_pct(w_pct: float, m1: float, m2: float) -> float:
+    """Convert light-component mass % into mole %."""
+    w = float(w_pct) / 100.0
+    n1 = w / float(m1)
+    n2 = (1.0 - w) / float(m2)
+    return (n1 / max(1e-12, n1 + n2)) * 100.0
+
+
+def _mccabe_thiele_stages(
+    xs_vle: list[float],
+    ys_vle: list[float],
+    xd: float,
+    xw: float,
+    r_ratio: float | None = None,
+    xf: float | None = None,
+    q: float | None = None,
+) -> int:
+    """Count theoretical tray stages (reboiler subtracted: steps - 1) using linear VLE interpolation."""
+    def _x_eq(y_val: float) -> float:
+        for i in range(len(ys_vle) - 1):
+            if ys_vle[i] <= y_val <= ys_vle[i + 1]:
+                dy = max(1e-12, ys_vle[i + 1] - ys_vle[i])
+                return xs_vle[i] + (y_val - ys_vle[i]) / dy * (xs_vle[i + 1] - xs_vle[i])
+        return y_val
+
+    full_reflux = r_ratio is None or xf is None or q is None
+    if not full_reflux:
+        m_r = float(r_ratio) / (float(r_ratio) + 1.0)
+        b_r = xd / (float(r_ratio) + 1.0)
+        if abs(float(q) - 1.0) > 1e-6:
+            m_q = float(q) / (float(q) - 1.0)
+            b_q = -float(xf) / (float(q) - 1.0)
+            x_int = (b_q - b_r) / (m_r - m_q)
+        else:
+            x_int = float(xf)
+        y_int = m_r * x_int + b_r
+        m_s = (y_int - xw) / max(1e-9, x_int - xw)
+        b_s = xw - m_s * xw
+
+    x_cur = xd
+    y_cur = xd
+    steps = 0
+    while x_cur > xw and steps < 50:
+        x_eq = _x_eq(y_cur)
+        steps += 1
+        if full_reflux:
+            y_next = x_eq
+        elif x_eq >= x_int:
+            y_next = m_r * x_eq + b_r
+        else:
+            y_next = m_s * x_eq + b_s
+        x_cur = x_eq
+        y_cur = y_next
+    return max(0, steps - 1)
+
+
+def calc_distillation_1522(
+    system: str,
+    wd_full: float | None = None,
+    ww_full: float | None = None,
+    wd_part: float | None = None,
+    ww_part: float | None = None,
+    wf_part: float | None = None,
+    l_lh: float | None = None,
+    d_lh: float | None = None,
+    t_feed: float | None = None,
+    np_plates: float = 10.0,
+    m1: float | None = None,
+    m2: float | None = None,
+) -> dict[str, Any]:
+    """Compute full-reflux and partial-reflux distillation data-table quantities for OBER 1522."""
+    key = system.lower().strip()
+    if key not in _DIST1522_SYSTEMS:
+        raise ValueError(f"Unsupported system '{system}'. Choose from: {sorted(_DIST1522_SYSTEMS)}")
+    cfg = _DIST1522_SYSTEMS[key]
+    eff_m1 = float(m1) if m1 is not None else float(cfg["M1"])
+    eff_m2 = float(m2) if m2 is not None else float(cfg["M2"])
+    out: dict[str, Any] = {
+        "system": key,
+        "system_label": cfg["label"],
+        "M1": eff_m1,
+        "M2": eff_m2,
+        "NP": float(np_plates),
+    }
+
+    if wd_full is not None and ww_full is not None:
+        xd_f = _wt_to_mol_pct(wd_full, eff_m1, eff_m2)
+        xw_f = _wt_to_mol_pct(ww_full, eff_m1, eff_m2)
+        out["xD_full_pct"] = round(xd_f, 2)
+        out["xW_full_pct"] = round(xw_f, 2)
+        if "vle_xs" in cfg:
+            nt_full = _mccabe_thiele_stages(cfg["vle_xs"], cfg["vle_ys"], xd_f / 100.0, xw_f / 100.0)
+            out["NT_full"] = nt_full
+            out["ET_full_pct"] = round(nt_full / float(np_plates) * 100.0, 2)
+
+    if None not in (wd_part, ww_part, wf_part, l_lh, d_lh, t_feed):
+        xd_p = _wt_to_mol_pct(float(wd_part), eff_m1, eff_m2)
+        xw_p = _wt_to_mol_pct(float(ww_part), eff_m1, eff_m2)
+        xf_p = _wt_to_mol_pct(float(wf_part), eff_m1, eff_m2)
+        r_ratio = float(l_lh) / max(1e-9, float(d_lh))
+        x_f = xf_p / 100.0
+        w_f = float(wf_part) / 100.0
+        a, b, c = cfg["tb_coeffs"]
+        t_bp = a * (x_f ** 2) + b * x_f + c
+        t_avg = 0.5 * (t_bp + float(t_feed))
+        m_mix = x_f * eff_m1 + (1.0 - x_f) * eff_m2
+        cp1_v = _interp_table(t_avg, cfg["cp1"])
+        cp2_v = _interp_table(t_avg, cfg["cp2"])
+        r1_v = _interp_table(t_bp, cfg["r1"])
+        r2_v = _interp_table(t_bp, cfg["r2"])
+        cp_m = m_mix * (w_f * cp1_v + (1.0 - w_f) * cp2_v)
+        r_m = m_mix * (w_f * r1_v + (1.0 - w_f) * r2_v)
+        q_val = (cp_m * (t_bp - float(t_feed)) + r_m) / max(1e-9, r_m)
+        out.update(
+            {
+                "xD_part_pct": round(xd_p, 2),
+                "xW_part_pct": round(xw_p, 2),
+                "xF_part_pct": round(xf_p, 2),
+                "R": round(r_ratio, 2),
+                "t_bp_C": round(t_bp, 2),
+                "t_avg_C": round(t_avg, 2),
+                "cp1_kJ_kgC": round(cp1_v, 4),
+                "cp2_kJ_kgC": round(cp2_v, 4),
+                "Cp_m_kJ_kmolC": round(cp_m, 2),
+                "r1_kJ_kg": round(r1_v, 2),
+                "r2_kJ_kg": round(r2_v, 2),
+                "r_m_kJ_kmol": round(r_m, 2),
+                "q": round(q_val, 2),
+            }
+        )
+        if "vle_xs" in cfg:
+            nt_part = _mccabe_thiele_stages(
+                cfg["vle_xs"],
+                cfg["vle_ys"],
+                xd_p / 100.0,
+                xw_p / 100.0,
+                r_ratio=r_ratio,
+                xf=x_f,
+                q=q_val,
+            )
+            out["NT_part"] = nt_part
+            out["ET_part_pct"] = round(nt_part / float(np_plates) * 100.0, 2)
+
+    return out
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="OBER chemical simulation calculator CLI")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -342,6 +524,20 @@ def _build_parser() -> argparse.ArgumentParser:
     p_ac.add_argument("--d", type=float, default=0.050)
     p_ac.add_argument("--z", type=float, default=0.700)
 
+    p_d15 = sub.add_parser("distillation-1522", help="OBER 1522 binary distillation data processing")
+    p_d15.add_argument("--system", required=True, choices=sorted(_DIST1522_SYSTEMS))
+    p_d15.add_argument("--wd-full", type=float, default=None)
+    p_d15.add_argument("--ww-full", type=float, default=None)
+    p_d15.add_argument("--wd-part", type=float, default=None)
+    p_d15.add_argument("--ww-part", type=float, default=None)
+    p_d15.add_argument("--wf-part", type=float, default=None)
+    p_d15.add_argument("--l-lh", type=float, default=None)
+    p_d15.add_argument("--d-lh", type=float, default=None)
+    p_d15.add_argument("--t-feed", type=float, default=None)
+    p_d15.add_argument("--np", dest="np_plates", type=float, default=10.0)
+    p_d15.add_argument("--m1", type=float, default=None)
+    p_d15.add_argument("--m2", type=float, default=None)
+
     return parser
 
 
@@ -404,6 +600,21 @@ def main(argv: Iterable[str] | None = None) -> int:
             args.y2,
             args.d,
             args.z,
+        )
+    elif args.cmd == "distillation-1522":
+        res = calc_distillation_1522(
+            args.system,
+            args.wd_full,
+            args.ww_full,
+            args.wd_part,
+            args.ww_part,
+            args.wf_part,
+            args.l_lh,
+            args.d_lh,
+            args.t_feed,
+            args.np_plates,
+            args.m1,
+            args.m2,
         )
     else:
         raise SystemExit(f"Unsupported command: {args.cmd}")

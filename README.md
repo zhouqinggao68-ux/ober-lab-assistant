@@ -1,37 +1,44 @@
-# ober-lab-assistant（欧倍尔化工虚拟仿真实验 AI 助手 v0.5.0）
+# ober-lab-assistant（欧倍尔化工虚拟仿真实验 AI 助手 v0.7.0）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/Python-3.12%2B-3776AB.svg)](server/pyproject.toml)
-[![MCP](https://img.shields.io/badge/Protocol-MCP%20Stdio%20%2F%20HTTP-green.svg)](mcp_config.json)
+[![MCP](https://img.shields.io/badge/Protocol-MCP%20%2B%20CLI--Anything-green.svg)](mcp_config.json)
 
-面向 **欧倍尔（OBR）化工虚拟仿真实验** 的跨平台 AI Agent 插件。通过本地 **WGC / MSS 双通道视觉感知 + RapidOCR + 原生七段数码管解码 + 闭环阀门控制 + 化工物性计算 CLI + 实机校准 SOP**，可在 **豆包工作（Doubao Work）**、**DeepSeek-Harness（DSH）**、**Antigravity（AGY）**、**Claude Code / Cursor / Codex** 等支持 MCP 或 Skills 的工作流中开箱即用。
+面向 **欧倍尔（OBR）化工虚拟仿真实验** 的跨平台 AI Agent 插件。通过本地 **WGC / MSS 双通道防遮挡视觉感知 + RapidOCR + 原生七段数码管解码 + 滑条首跳/自适应闭环阀门控制 + CLI-Anything 兼容 Agent-Native CLI（`ober-cli` / `cli-anything-ober`，支持 `--json` 与 Stateful REPL）+ 多实验化工物性计算 CLI + 实机校准 SOP**，可在 **Antigravity（AGY）**、**Claude Code / Codex / Cursor**、**豆包工作（Doubao Work）**、**DeepSeek-Harness（DSH）** 等工作流中通过 MCP 或 CLI 开箱即用。
 
 > **合规说明**：本工具仅用于在用户本人合法登录的 Windows 本地练习/实训窗口中辅助视觉读表、坐标标定、工程计算与标准 SOP 执行；不包含任何内存注入、反编译或绕过账号授权/考试监管之机制。
 
 ---
 
-## 实机端到端验证成绩（已全部实测通过）
+## 实机端到端验证成绩
 
-已在三大欧倍尔典型仿真架构下完成 **12 项完整实验** 实机端到端验证，全部达成 **成绩 ≥ 90 且累计用时 < 2 小时**：
+已在四大欧倍尔典型仿真架构下完成 **27 项次完整实验** 实机端到端验证，全部达成 **成绩 ≥ 90 且累计/单次用时 < 2 小时**：
 
 | 仿真项目与软件架构 | 覆盖子实验 | 实测平台成绩（百分制） | 关键技术验证点 |
 | :--- | :--- | :---: | :--- |
 | **精馏实训装置 3D**<br>（架构 A：`UnityVR` + `仿DCS` + `ModelManage`） | 开车 / 停车 / 全回流 / `R=3` | 全项通过（`>= 90`） | 热波多板同步盯表、`VA` 手动球阀 90° 旋转悬停闭环、悬浮条停靠 |
 | **流化床干燥实验 3D【9310】**<br>（架构 B1：`UnityVR` + 独立 `scorerun.exe`） | 干燥速率曲线测定 | **`95.238`** | `SWP-C40/D40` 红字七段数码管原生解码、6.7x 倍速计时盯表、12×7 四象限填表 |
-| **吸收解吸综合 3D【1547】**<br>（架构 B2：单进程 `UnityVR` + 内嵌查看评分） | 1. 干填料塔流体力学（指导）<br>2. 湿填料塔流体力学（指导）<br>3. 吸收传质系数测定（指导）<br>4. 填料塔流体力学性能测定<br>5. 二氧化碳吸收解吸实验<br>6. 氨吸收实验<br>7. 丙酮吸收实验 | **`100`**<br>**`100`**<br>**`98.6`**<br>**`97.53`**<br>**`98.18`**<br>**`97.02`**<br>**`94.8`** | 旁路放空调节阀标题栏中性防遮挡闭环、`三通阀1` 变黄终点盯表、`VA13` 色谱 HUD、`chem_calc.py` 23/21 项全自动核算 |
+| **吸收解吸综合 3D【1547】**<br>（架构 B2：单进程 `UnityVR` + 内嵌查看评分） | 干塔 / 湿塔 / 传质（指导）<br>填料塔流体力学 / CO₂ / 氨 / 丙酮 | **`100 / 100 / 98.6`**<br>**`97.53 / 98.18 / 97.02 / 94.8`** | 旁路放空调节阀标题栏中性防遮挡闭环、`三通阀1` 变黄终点盯表、`VA13` 色谱 HUD、`chem_calc.py` 23/21 项全自动核算 |
+| **精馏综合拓展 3D【1522】**<br>（混合：`ModelManage`/纯 B2 + 内嵌评分） | 2–16 项实测通过（`15/17 已通过`）：正常开车 / 正常停车 / 4 类异常 / 3 类变参 / 常压 / 减压 / 加压 / 塔板数 / 乙醇-水 | **`92.04`、`100 × 6`、`94.44`**<br>**`91.41 / 94.35 / 99.91 / 99.67 / 96.15`** | 滑条首跳直达 (`use_slider_jump=True`)、短格式 `VA29:开/关` 校验、`y=515` 手轮防误触、`VA25->100%` 速冷、`记录数据`+`查看图表` 双提交、`distillation-1522` 三物系核算 |
 
 ---
 
-## 核心能力升级（v0.3.0 → v0.5.0）
+## 核心能力升级（v0.6.0 → v0.7.0）
 
-- **单 MCP 独立闭环**：`ober-ocr-mcp` 内置原生 Win32 `mouse_event` 垂直/水平滚轮 (`scroll_mouse`)、点击/长按 (`fast_click`)、拖拽 (`drag_mouse`) 与键盘 Unicode 输入 (`fast_type`)，**不再强依赖外部 `windows-mcp.exe`**，方便 **豆包工作 / DeepSeek-Harness** 轻量接入。
-- **工程级视觉增强**：
-  - `read_seven_segment_roi`：基于红通道差分与亮度分位数剥离暗红未亮 ghost 笔段，准确识别 `SWP-C40/D40`。
-  - `adjust_valve_popup`：闭环调节 0–100% 阀门弹窗，读数前自动将光标移至标题栏中性区消除“悬停提示遮挡读数”隐患。
-  - `watch_color_endpoint`：监测吸收瓶黄变/滴定指示剂变色终点（`yellow/red/pink/blue/green`）。
-  - `detect_ui_boxes`：`radio_circles` 自动检测圆心亮度输出 `checked: true/false`；新增 `scrollbar_thumb` 识别横竖滚动条滑块；放宽 `input_boxes` 对 230px 宽列的支持。
-  - `_extract_numbers`：自动分离黏连读数如 `水流量计F4103.86` → `[103.86]`、`空气流量计F21.00` → `[1.0]`。
-- **离线化工计算 CLI (`chem_calc.py`)**：一键算出流化床干燥、填料塔流体力学、CO₂ 吸收解吸、氨吸收（23 项）、丙酮吸收（21 项）全部实验数据。
+- **CLI-Anything 兼容 Agent-Native CLI（`ober-cli` / `cli-anything-ober`）**：
+  - 遵循 [HKUDS/CLI-Anything](https://github.com/HKUDS/CLI-Anything) 规范，新增 `server/ober_cli.py`，支持 `--json` 结构化子命令与无参交互式 Stateful REPL（带排他文件锁会话持久化），涵盖 `probe` / `focus` / `ocr` / `led` / `boxes` / `valve set|toggle` / `batch` / `preset` / `calc` / `session`，让 Codex / Claude Code / Antigravity 在无 MCP 或批处理场景下直接通过命令行操控，显著降低截图轮次。
+- **调节阀弹窗滑条首跳直达（Slider Direct-Jump）**：
+  - `adjust_valve_popup` 新增 `use_slider_jump=True` 及 `slider_zero_xy` / `slider_full_xy`（1522 默认 `rx=0.44514..0.55486, ry=0.58491`），一发线性插值点击滑条误差 `<= 0.25%`，彻底避免高速阀门在 `0% <-> 100%` 间反复震荡；`run_action_sequence` 兼容 `op`/`type` 与 `wait` 的 `seconds`/`sec`。
+
+- **真实前台唤醒与后台自动 WGC 防遮挡**：`bring_window_to_front` 新增 `AttachThreadInput`、`HWND_TOPMOST/NOTOPMOST` 翻转、`Alt+Ctrl` 多级解锁并返回真实 `is_foreground`；`_capture_target(backend="auto")` 在目标窗口未获前台时优先走 WGC，彻底消除 MSS 拍到遮挡窗口的现象。
+- **自适应闭环调节阀与短格式 `VA29:开/关` 支持**：
+  - `adjust_valve_popup` 修正 `1522` 默认可点击手轮坐标（`ry=0.47964 / y=515`，避开 `y=565` 纯文字），并增加**开关速率在线估算、过冲减半阻尼与连续 3 次卡死早停诊断**；
+  - `click_3d_valve_verified` 与 `_parse_valve_tooltip_state` 原生支持 `VA29:开`/`VA29:关` 短格式及 2 位/3 位跨位号隔离，新增 `press_duration_sec` 参数。
+- **盯表、检测与批处理增强**：
+  - `watch_value_threshold` 新增 `valid_min`/`valid_max` 异常识别滤除，防止单帧 OCR 跳变触发误判或清零计数；
+  - `detect_ui_boxes` 支持 `radio_boxes`、`close_x`、`scrollbar` 等常用别名；
+  - `run_action_sequence` 支持 `default_window_query` 全局默认窗口、以及 `move` / `wait` / `adjust_valve` / `detect_boxes` / `capture` 新原语。
+- **精馏综合拓展【1522】完整计算器与 SOP**：`chem_calc.py` 新增 `distillation-1522` 子命令（覆盖 `ethanol-propanol` + McCabe-Thiele、`ethanol-water`、`benzene-toluene`）；新增 `presets/distillation-1522-sop.json` 与 [distillation-1522-sop.md](skills/ober-lab-assistant/references/distillation-1522-sop.md)。
 
 ---
 
@@ -132,4 +139,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1 -StartHttp -SkipT
 # 流化床干燥（含水率与干基计算）
 .\server\.venv\Scripts\python.exe .\skills\ober-lab-assistant\scripts\chem_calc.py fluidized-bed `
   --time-mmss 08:08.57 --w1 37.50 --w2 35.50 --w0 32.0
+
+# 精馏综合拓展 1522（乙醇-水体系 P05 全套计算；支持 ethanol-propanol / ethanol-water / benzene-toluene）
+.\server\.venv\Scripts\python.exe .\skills\ober-lab-assistant\scripts\chem_calc.py distillation-1522 `
+  --system ethanol-water --wd-full 87.97 --ww-full 0.39 `
+  --wd-part 75.06 --ww-part 0.38 --wf-part 31.53 --l-lh 9.60 --d-lh 2.40 --t-feed 38.3 --np 10
 ```

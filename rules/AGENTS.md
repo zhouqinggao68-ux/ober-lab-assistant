@@ -9,15 +9,17 @@
      - **架构 A（3D + `仿DCS / GUS.exe` + `ModelManage.exe`）**：如精馏实训，评分在 3D 内 `查看评分`，退出经 `ModelManage.exe` 悬浮条红色停止钮。
      - **架构 B1（纯 3D + 独立评分窗 `scorerun.exe`）**：如流化床干燥，退出经 `UnityVR.exe` 顶部 `退出`。
      - **架构 B2（单进程纯 3D + 内嵌 `查看评分`）**：如吸收解吸综合实验（`1547`），仅 `UnityVR.exe` 单进程，退出经 `UnityVR.exe` 顶部 `退出`。
-   - 每次重启实验后必须重新检索新 `HWND`，严禁复用旧句柄；窗口前置统一调用 `ober-ocr-mcp:bring_window_to_front`。若截屏为空白、锁屏或隔离桌面（`exebox-*`），立即停止并告知用户切至主桌面终端以 HTTP 模式启动本地 MCP。
+   - 每次重启实验后必须重新检索新 `HWND`，严禁复用旧句柄；窗口前置统一调用 `ober-ocr-mcp:bring_window_to_front` 并核对返回的 `is_foreground`（当 Windows 前台锁阻止切窗时，`ober-ocr-mcp` 在 `backend="auto"` 下会自动以 WGC 读取后台窗口内容，键鼠操作前仍须确保目标窗口实际在前台）。若截屏为空白、锁屏或隔离桌面（`exebox-*`），立即停止并告知用户切至主桌面终端以 HTTP 模式启动本地 MCP。
 
 3. **精准视觉读表、闭环调节与抗输入法准则**：
    - **进场先审计后操作**：操作设备前须先核对实机 `查看评分` / `文件管理` / `记录数据` 表头与列单位 / `设备列表` 菜单顺序（不同子实验分类顺序可能互换）。
-   - **红字数码管**：遇到 `SWP-C40` / `SWP-D40` 等暗红背景七段数码管时，必须用 `read_seven_segment_roi(..., color="red")` 或 `watch_value_threshold(..., led_color="red")`；开加热前必须核清设定值 `SP`。
-   - **调节阀弹窗与 3D 阀门闭环**：调百分比优先用 `adjust_valve_popup`（读 `%` 前先将光标移至弹窗标题栏中性区防止提示条遮挡数字）；2 态球阀/开关必须调用 `hover_and_ocr` 或 `click_3d_valve_verified` 前后复核 `已开`/`已关`/`已打开`/`已关闭`。
-   - **色变终点与计时等待**：化学指示剂变色用 `watch_color_endpoint`；仿真计时用 `watch_value_threshold(..., parse_mode="mmss_minutes")`。
-   - **数据计算与防重交**：先通过 `skills/ober-lab-assistant/scripts/chem_calc.py` 计算核验再填表；单元格用 `detect_ui_boxes` 定位、`fast_type(..., press_enter=False)` 填写，全表复核后再点一次 `提交`。
+   - **红字数码管**：遇到 `SWP-C40` / `SWP-D40` 等暗红背景七段数码管时，必须用 `read_seven_segment_roi(..., color="red")` 或 `watch_value_threshold(..., led_color="red")`；对噪声 OCR 仪表建议传入 `valid_min`/`valid_max` 过滤误读；开加热前必须核清设定值 `SP`。
+   - **调节阀弹窗与 3D 阀门闭环**：调百分比优先用 `adjust_valve_popup(..., use_slider_jump=True)`（1522 等带 0–100% 底部滑条的高速阀门一发直达误差 `<= 0.25%`，再自动阻尼微调；读 `%` 前先将光标移至弹窗标题栏中性区防止提示条遮挡数字；**`1522` 等项目手轮可点区在 `y=515` 图标处，切勿误点 `y=565` 的“开/关”纯文字**）；2 态球阀/开关必须调用 `hover_and_ocr` 或 `click_3d_valve_verified` 前后复核 `开`/`关`/`已开`/`已关`/`已打开`/`已关闭`（兼容 `VA29:开/关` 短格式）。
+   - **CLI-Anything 批处理优先**：多步连续切菜单/调阀/填表优先使用 `run_action_sequence` 或 `ober-cli --json batch` 单次批处理，尽量减少整屏截屏与多轮往返。
+   - **色变终点与计时等待**：化学指示剂变色用 `watch_color_endpoint`；仿真计时用 `watch_value_threshold(..., parse_mode="mmss_minutes")`；降顶温等冷却步骤可在停加热后临时全开冷却水阀至 `100%` 加速。
+   - **数据计算、`查看图表` 双提交与防重交**：先通过 `skills/ober-lab-assistant/scripts/chem_calc.py`（精馏 `1522` 用 `distillation-1522` 子命令）计算核验再填表；单元格用 `detect_ui_boxes` 定位、`fast_type(..., press_enter=False)` 填写，全表复核后再点一次 `提交`；如项目含 `查看图表`（McCabe-Thiele `NT`/`ET` 输入框），填完须点击右上 **`保存`** 后再关红 **`X`**。
 
-4. **化工仿真防扣分与交卷解锁铁律**：
+4. **化工仿真防扣分、多批次续跑与交卷解锁铁律**：
    - 停车严禁跳过前置条件（如先开旁路风阀/冷却降温达标后再停风机或关总电源）；严格控制双小时平台计时（接近 90 分钟即应收敛交卷）。
+   - **分批次自动化维护**：多项目续跑须维护 `progress.json`（含 `last_heartbeat`）与看门狗 cron；若配额/异常中断导致单次逼近 2 小时且无法收尾，应在退场前先清理超时 `UnityVR.exe` 并回 Edge 解锁，避免卡死后续批次；一旦任务暂停或全部通关，立即取消看门狗 cron 严禁遗留自动启动。
    - **严禁误点评分界面 `保存成绩`**；退出 `UnityVR.exe` 后回到浏览器先确认位于平台标签页，点 `更新题目状态` 并对未解锁行点击 `结束本项目` 解锁后二次刷新，核验 `最高成绩 >= 90`、`时间 < 02:00:00` 及 `操作 = 启动`。
